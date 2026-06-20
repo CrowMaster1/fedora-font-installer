@@ -247,20 +247,22 @@ def update_flatpaks(log):
     if not apps:
         log("No Flatpak apps found.")
         return
-    log(f"Found {len(apps)} app(s). Fonts in ~/.local/share/fonts are already")
-    log("visible to sandboxed apps — refreshing fc-cache inside each sandbox.")
+    var_app = os.path.expanduser("~/.var/app")
+    log(f"Found {len(apps)} app(s).")
+    log("Strategy: delete stale per-app fontconfig cache — app rebuilds on next launch.")
+
     for app_id in apps:
-        log(f"  {app_id}...")
-        try:
-            res = _run_cmd(
-                ["flatpak", "run", "--command=fc-cache", app_id, "--", "-fv"],
-                log, capture_output=True, text=True, timeout=30,
-            )
-            log("    OK" if res.returncode == 0 else "    skipped (no fc-cache in sandbox)")
-        except subprocess.TimeoutExpired:
-            log("    timeout — skipped")
-        except Exception as e:
-            log(f"    error: {e}")
+        cache_dir = os.path.join(var_app, app_id, "cache", "fontconfig")
+        if os.path.isdir(cache_dir):
+            shutil.rmtree(cache_dir)
+            log(f"  [cleared] {app_id}")
+        else:
+            log(f"  [no cache] {app_id}")
+
+    # Also refresh system fontconfig so RPM LibreOffice picks up new fonts
+    log("Refreshing system fc-cache...")
+    _run_cmd(["fc-cache", "-f"], log, capture_output=True, text=True)
+    log("Done. Launch each app — font cache rebuilds automatically on first open.")
     log("=== End ===")
 
 
